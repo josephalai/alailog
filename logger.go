@@ -4,9 +4,69 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 )
+
+// Debugger is a structure that provides functions for debugging code.
+type Debugger struct{}
+
+// GetFunctionName returns the name of the function that is 'steps' frames up the call stack.
+func (d *Debugger) GetFunctionName(steps int) string {
+	pc, _, _, _ := runtime.Caller(steps)
+	return runtime.FuncForPC(pc).Name()
+}
+
+func (l *Logger) PrintFunctionName(steps int) {
+	fnName := l.GetFunctionName(steps + 1) // adding 1 to steps to account for this function call
+	Printf("Function name %s\n", fnName)
+}
+
+// GetCallingFunctionName gets the name of the function that calls it.
+func (d *Debugger) GetCallingFunctionName() string {
+	return d.GetFunctionName(2) // 2 steps up the call stack to get the function that calls the function that calls this function
+}
+
+// GetFileAndLineNumber returns the file name and line number of the callers up the stack.
+func (d *Debugger) GetFileAndLineNumber(steps int) (string, int) {
+	_, file, line, _ := runtime.Caller(steps)
+	return file, line
+}
+
+// PrintFileAndLineNumber prints the file name and line number of the callers up the stack.
+func (l *Logger) PrintFileAndLineNumber(steps int) {
+	file, line := l.GetFileAndLineNumber(steps + 1) // account for this function call
+	Printf("File: %s, Line: %d\n", file, line)
+}
+
+// LogVar logs a variable name and the corresponding value.
+func (l *Logger) LogVar(name string, value interface{}) {
+	Printf("Variable: %s, Value: %v\n", name, value)
+}
+
+// ElapsedExecutionTime tracks the execution time of a function or segment of code.
+func (d *Debugger) elapsedExecutionTime(start time.Time) time.Duration {
+	return time.Since(start)
+}
+
+// ElapsedExecutionTime tracks the execution time of a function or segment of code.
+func (d *Logger) ElapsedExecutionTime(start time.Time, name string) {
+	elapsed := time.Since(start)
+	Printf("%s took %v\n", name, elapsed)
+}
+
+// DebugMessage prints a detailed message including function name,
+// file name and line number of the caller.
+func (d *Debugger) DebugMessage(goSkip ...int) {
+	skip := 2
+	if goSkip != nil {
+		skip += goSkip[0]
+	}
+	functionName := d.GetFunctionName(skip)
+	file, line := d.GetFileAndLineNumber(skip) // 2 steps back in call stack to account for this function call
+	Printf("Debug Message - Function name: %s, File: %s, Line: %d\n", functionName, file, line)
+}
 
 // GoLogger represents a logger instance that provides logging functionalities.
 //
@@ -178,6 +238,8 @@ type Logger struct {
 	TimestampFormat string
 
 	DebugMode bool
+
+	Debugger
 }
 
 // EnableDebugMode turns on the debug logs output.
@@ -252,6 +314,7 @@ func NewLogger(file *os.File, level Level, stdout bool, stderr bool, color bool,
 		textColor:       textColor,
 		Timestamps:      timestamps,
 		TimestampFormat: timestampFormat,
+		DebugMode:       true,
 	}
 }
 
@@ -314,10 +377,19 @@ func (l *Logger) LogColor(level Level, color Color, messageStr interface{}) {
 	}
 }
 
+func (l *Logger) DebugLog(skip ...int) (is bool) {
+	is = false
+	if l.DebugMode {
+		l.DebugMessage(skip...)
+		is = true
+	}
+	return
+}
+
 // Debug sends a debug message to the logger.
 // It calls the Log method of the logger with the Debug level and the provided message.
 func (l *Logger) Debug(message interface{}) {
-	if l.DebugMode {
+	if l.DebugLog(4) {
 		l.Log(DebugLvl, message)
 	}
 }
@@ -526,9 +598,7 @@ func (l *Logger) Infof(format string, args ...interface{}) {
 // of arguments to be formatted in the message.
 // Example usage: logger.Debugf("This is a debug message: %v", variable)
 func (l *Logger) Debugf(format string, args ...interface{}) {
-	if l.DebugMode {
-		l.Debug(fmt.Sprintf(format, args...))
-	}
+	fmt.Println(fmt.Sprintf(format, args...))
 }
 
 // Printf formats the string according to the specified format string
@@ -733,21 +803,21 @@ func Fatalln(args ...interface{}) {
 }
 
 func (l *Logger) Debugln(args ...interface{}) {
-	if l.DebugMode {
-		l.Debug(fmt.Sprintln(args...))
+	if l.DebugLog(4) {
+		l.Println(fmt.Sprintln(args...))
 	}
 }
 
 func Debug(args ...interface{}) {
 	logger := GetInstance()
-	if logger.DebugMode {
+	if logger.DebugLog(4) {
 		logger.Debug(args)
 	}
 }
 
 func Debugf(format string, args ...interface{}) {
 	logger := GetInstance()
-	if logger.DebugMode {
+	if logger.DebugLog(4) {
 		logger.Debugf(format, args...)
 	}
 }
@@ -759,7 +829,7 @@ func Debugf(format string, args ...interface{}) {
 // logger.Debugln("This is a debug message")
 func Debugln(args ...interface{}) {
 	logger := GetInstance()
-	if logger.DebugMode {
+	if logger.DebugLog(4) {
 		logger.Debugln(args...)
 	}
 }
